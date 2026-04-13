@@ -23,6 +23,34 @@ class OcrService:
             )
         return self._ocr
 
+    def _resize_image(self, image: Image.Image, max_size: int) -> Image.Image:
+        """
+        Resize image jika dimensi lebih besar dari max_size.
+        Menjaga aspect ratio.
+
+        Args:
+            image: PIL Image object
+            max_size: Ukuran maksimum sisi terpanjang
+
+        Returns:
+            PIL Image object (resized jika perlu)
+        """
+        width, height = image.size
+
+        if width <= max_size and height <= max_size:
+            return image
+
+        if width > height:
+            new_width = max_size
+            new_height = int(height * (max_size / width))
+        else:
+            new_height = max_size
+            new_width = int(width * (max_size / height))
+
+        resized_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        return resized_image
+
     def extract_text_from_bytes(self, image_bytes: bytes) -> str:
         """
         Extract text from image bytes.
@@ -48,14 +76,17 @@ class OcrService:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
+            # Resize image jika terlalu besar
+            image = self._resize_image(image, settings.OCR_MAX_IMAGE_SIZE)
+
             # Save to temp file for PaddleOCR (bytes input not reliable)
             import tempfile
             import os as temp_os
-            
+
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                 image.save(tmp, format="PNG")
                 tmp_path = tmp.name
-            
+
             try:
                 # Run OCR with file path
                 result = self.ocr.ocr(tmp_path)
@@ -68,10 +99,10 @@ class OcrService:
 
             # Extract text from result - handle different result structures
             extracted_lines = []
-            
+
             # Handle list of pages (result is list of pages, each page is list of lines)
             pages = result if isinstance(result, list) else [result]
-            
+
             for page in pages:
                 if not page:
                     continue
@@ -116,10 +147,10 @@ class OcrService:
 
             # Extract text from result - handle different result structures
             extracted_lines = []
-            
+
             # Handle list of pages
             pages = result if isinstance(result, list) else [result]
-            
+
             for page in pages:
                 if not page:
                     continue
