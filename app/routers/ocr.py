@@ -1,7 +1,7 @@
 import os
 import uuid
 import aiofiles
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi import UploadFile, File
 from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,10 +142,10 @@ async def get_ocr_by_id(
     },
 )
 async def list_ocr_results(
-    page: Annotated[int, Query(1, ge=1, description="Nomor halaman", example=1)],
-    page_size: Annotated[int, Query(10, ge=1, le=100, description="Jumlah item per halaman", example=10)],
-    status: Annotated[Optional[str], Query(None, description="Filter berdasarkan status (pending/completed/failed)", example="completed")],
     db: Annotated[AsyncSession, Depends(get_db)],
+    page: Annotated[int, Query(ge=1, description="Nomor halaman")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Jumlah item per halaman")] = 10,
+    status: Annotated[Optional[str], Query(description="Filter berdasarkan status (pending/completed/failed)")] = None,
 ):
     """
     List semua hasil OCR yang sudah diproses, dengan pagination dan filter status.
