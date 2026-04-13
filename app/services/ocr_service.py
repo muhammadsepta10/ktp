@@ -1,8 +1,12 @@
+import logging
 from paddleocr import PaddleOCR
 from PIL import Image
 import io
 from typing import Optional
 from app.config import settings
+
+# Disable PaddleOCR verbose logging
+logging.getLogger("ppocr").setLevel(logging.WARNING)
 
 
 class OcrService:
@@ -16,7 +20,6 @@ class OcrService:
             self._ocr = PaddleOCR(
                 use_angle_cls=True,
                 lang=self.lang,
-                show_log=False,
             )
         return self._ocr
 

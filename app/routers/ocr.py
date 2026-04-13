@@ -1,7 +1,9 @@
 import os
 import uuid
 import aiofiles
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException
+from fastapi import UploadFile, File
+from typing import Annotated
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import Optional
@@ -47,9 +49,9 @@ async def save_upload_file(upload_file: UploadFile) -> tuple[str, bytes]:
     },
 )
 async def create_ocr(
-    file: UploadFile = File(..., description="File gambar (jpeg/png/gif/webp/bmp)"),
-    db: AsyncSession = Depends(get_db),
-    ocr_service: OcrService = Depends(get_ocr_service),
+    file: Annotated[UploadFile, File(description="File gambar (jpeg/png/gif/webp/bmp)")],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    ocr_service: Annotated[OcrService, Depends(get_ocr_service)],
 ):
     """
     Upload file gambar dan ekstrak teks menggunakan PaddleOCR. Hasil disimpan ke database dan dikembalikan ke user.
@@ -74,6 +76,7 @@ async def create_ocr(
         db.add(ocr_result)
         await db.flush()
 
+
         # Run OCR
         try:
             extracted_text = ocr_service.extract_text_from_bytes(content)
@@ -82,6 +85,12 @@ async def create_ocr(
         except ValueError as e:
             ocr_result.status = "failed"
             ocr_result.extracted_text = str(e)
+            await db.commit()
+            await db.refresh(ocr_result)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to process image: {str(e)}"
+            )
 
         await db.commit()
         await db.refresh(ocr_result)
@@ -104,7 +113,7 @@ async def create_ocr(
 )
 async def get_ocr_by_id(
     ocr_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Ambil hasil OCR berdasarkan UUID.
@@ -131,10 +140,10 @@ async def get_ocr_by_id(
     },
 )
 async def list_ocr_results(
-    page: int = Query(1, ge=1, description="Nomor halaman", example=1),
-    page_size: int = Query(10, ge=1, le=100, description="Jumlah item per halaman", example=10),
-    status: Optional[str] = Query(None, description="Filter berdasarkan status (pending/completed/failed)", example="completed"),
-    db: AsyncSession = Depends(get_db),
+    page: Annotated[int, Query(1, ge=1, description="Nomor halaman", example=1)],
+    page_size: Annotated[int, Query(10, ge=1, le=100, description="Jumlah item per halaman", example=10)],
+    status: Annotated[Optional[str], Query(None, description="Filter berdasarkan status (pending/completed/failed)", example="completed")],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     List semua hasil OCR yang sudah diproses, dengan pagination dan filter status.
@@ -181,7 +190,7 @@ async def list_ocr_results(
 )
 async def delete_ocr(
     ocr_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """
     Hapus hasil OCR dari database berdasarkan UUID.
