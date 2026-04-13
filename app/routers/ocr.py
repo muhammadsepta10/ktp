@@ -97,6 +97,8 @@ async def create_ocr(
 
         return ocr_result
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process image: {str(e)}")
 

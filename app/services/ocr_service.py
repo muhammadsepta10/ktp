@@ -48,23 +48,47 @@ class OcrService:
             if image.mode != "RGB":
                 image = image.convert("RGB")
 
-            # Save to bytes for PaddleOCR
-            img_byte_arr = io.BytesIO()
-            image.save(img_byte_arr, format="PNG")
-            img_byte_arr.seek(0)
+            # Save to temp file for PaddleOCR (bytes input not reliable)
+            import tempfile
+            import os as temp_os
+            
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                image.save(tmp, format="PNG")
+                tmp_path = tmp.name
+            
+            try:
+                # Run OCR with file path
+                result = self.ocr.ocr(tmp_path)
+            finally:
+                # Cleanup temp file
+                temp_os.unlink(tmp_path)
 
-            # Run OCR
-            result = self.ocr.ocr(img_byte_arr.getvalue(), cls=True)
-
-            if not result or not result[0]:
+            if not result:
                 return ""
 
-            # Extract text from result
+            # Extract text from result - handle different result structures
             extracted_lines = []
-            for line in result[0]:
-                if line and len(line) > 1:
-                    text = line[1][0]  # Get the text content
-                    extracted_lines.append(text)
+            
+            # Handle list of pages (result is list of pages, each page is list of lines)
+            pages = result if isinstance(result, list) else [result]
+            
+            for page in pages:
+                if not page:
+                    continue
+                for line in page:
+                    if not line:
+                        continue
+                    # Handle different line formats
+                    # Format 1: [[box], (text, confidence)]
+                    # Format 2: {'text': ..., 'confidence': ...}
+                    if isinstance(line, (list, tuple)) and len(line) >= 2:
+                        text_info = line[1]
+                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
+                            extracted_lines.append(str(text_info[0]))
+                        elif isinstance(text_info, str):
+                            extracted_lines.append(text_info)
+                    elif isinstance(line, dict) and 'text' in line:
+                        extracted_lines.append(line['text'])
 
             return "\n".join(extracted_lines)
 
@@ -85,17 +109,31 @@ class OcrService:
             ValueError: If image is invalid or OCR fails
         """
         try:
-            result = self.ocr.ocr(image_path, cls=True)
+            result = self.ocr.ocr(image_path)
 
-            if not result or not result[0]:
+            if not result:
                 return ""
 
-            # Extract text from result
+            # Extract text from result - handle different result structures
             extracted_lines = []
-            for line in result[0]:
-                if line and len(line) > 1:
-                    text = line[1][0]
-                    extracted_lines.append(text)
+            
+            # Handle list of pages
+            pages = result if isinstance(result, list) else [result]
+            
+            for page in pages:
+                if not page:
+                    continue
+                for line in page:
+                    if not line:
+                        continue
+                    if isinstance(line, (list, tuple)) and len(line) >= 2:
+                        text_info = line[1]
+                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
+                            extracted_lines.append(str(text_info[0]))
+                        elif isinstance(text_info, str):
+                            extracted_lines.append(text_info)
+                    elif isinstance(line, dict) and 'text' in line:
+                        extracted_lines.append(line['text'])
 
             return "\n".join(extracted_lines)
 
