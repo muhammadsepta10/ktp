@@ -13,18 +13,30 @@ from app.config import settings
 
 router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"])
 
-@router.post("", response_model=KtpOcrDataResponse, responses={400: {"model": KtpOcrErrorResponse}})
+
+@router.post(
+    "",
+    response_model=KtpOcrDataResponse,
+    responses={
+        400: {"model": KtpOcrErrorResponse, "description": "File tidak valid atau image tidak terbaca"},
+        500: {"description": "Gagal menyimpan data KTP"},
+    },
+    summary="Upload gambar KTP dan ekstrak data",
+    description="Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan regex, dan simpan hasil ke database.",
+    response_description="Data KTP hasil ekstraksi dan parsing",
+)
 async def ocr_ktp(
-    image: UploadFile = File(...),
+    image: UploadFile = File(..., description="File gambar KTP (jpeg/png/jpg/webp/bmp)"),
     db: AsyncSession = Depends(get_db),
     ocr_service: OcrService = Depends(get_ocr_service),
 ):
-    # Validasi file type
+    """
+    Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan regex, dan simpan hasil ke database.
+    """
     allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "image/bmp"]
     if image.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail="File harus berupa gambar (jpeg/png/jpg/webp/bmp)")
 
-    # Simpan file
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     filename = f"ktp_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}_{image.filename}"
     filepath = os.path.join(settings.UPLOAD_DIR, filename)
@@ -32,17 +44,14 @@ async def ocr_ktp(
     async with aiofiles.open(filepath, "wb") as f:
         await f.write(content)
 
-    # Jalankan OCR
     try:
         raw_text = ocr_service.extract_text_from_bytes(content)
     except Exception:
         raise HTTPException(status_code=400, detail="image tidak terbaca")
 
-    # Parsing
     parsed = parse_ktp_text(raw_text)
     now = datetime.utcnow()
 
-    # Insert ke DB
     stmt = insert(KtpOcr).values(
         ktp_img=filename,
         raw_text=parsed["raw_text"],

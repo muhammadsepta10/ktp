@@ -34,14 +34,25 @@ async def save_upload_file(upload_file: UploadFile) -> tuple[str, bytes]:
     return filename, content
 
 
-@router.post("", response_model=OcrResultResponse, status_code=201)
+@router.post(
+    "",
+    response_model=OcrResultResponse,
+    status_code=201,
+    summary="Upload image untuk OCR",
+    description="Upload file gambar untuk diekstrak teksnya menggunakan PaddleOCR. File yang didukung: JPEG, PNG, GIF, WebP, BMP.",
+    response_description="Hasil OCR yang berhasil diproses",
+    responses={
+        400: {"description": "File type tidak valid"},
+        500: {"description": "Gagal memproses gambar"},
+    },
+)
 async def create_ocr(
-    file: UploadFile = File(...),
+    file: UploadFile = File(..., description="File gambar (jpeg/png/gif/webp/bmp)"),
     db: AsyncSession = Depends(get_db),
     ocr_service: OcrService = Depends(get_ocr_service),
 ):
     """
-    Upload image and extract text using OCR.
+    Upload file gambar dan ekstrak teks menggunakan PaddleOCR. Hasil disimpan ke database dan dikembalikan ke user.
     """
     # Validate file type
     allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"]
@@ -81,13 +92,22 @@ async def create_ocr(
         raise HTTPException(status_code=500, detail=f"Failed to process image: {str(e)}")
 
 
-@router.get("/{ocr_id}", response_model=OcrResultResponse)
+@router.get(
+    "/{ocr_id}",
+    response_model=OcrResultResponse,
+    summary="Ambil hasil OCR berdasarkan ID",
+    description="Ambil hasil OCR yang sudah diproses berdasarkan UUID.",
+    response_description="Data hasil OCR",
+    responses={
+        404: {"description": "OCR result tidak ditemukan"},
+    },
+)
 async def get_ocr_by_id(
     ocr_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Get OCR result by ID.
+    Ambil hasil OCR berdasarkan UUID.
     """
     result = await db.execute(
         select(OcrResult).where(OcrResult.id == ocr_id)
@@ -100,15 +120,24 @@ async def get_ocr_by_id(
     return ocr_result
 
 
-@router.get("", response_model=OcrResultList)
+@router.get(
+    "",
+    response_model=OcrResultList,
+    summary="List semua hasil OCR (pagination)",
+    description="Menampilkan semua hasil OCR yang sudah diproses, dengan dukungan pagination dan filter status.",
+    response_description="List hasil OCR",
+    responses={
+        200: {"description": "List hasil OCR"},
+    },
+)
 async def list_ocr_results(
-    page: int = Query(1, ge=1, description="Page number"),
-    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
-    status: Optional[str] = Query(None, description="Filter by status"),
+    page: int = Query(1, ge=1, description="Nomor halaman", example=1),
+    page_size: int = Query(10, ge=1, le=100, description="Jumlah item per halaman", example=10),
+    status: Optional[str] = Query(None, description="Filter berdasarkan status (pending/completed/failed)", example="completed"),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    List all OCR results with pagination.
+    List semua hasil OCR yang sudah diproses, dengan pagination dan filter status.
     """
     # Build query
     query = select(OcrResult)
@@ -140,13 +169,22 @@ async def list_ocr_results(
     )
 
 
-@router.delete("/{ocr_id}", status_code=204)
+@router.delete(
+    "/{ocr_id}",
+    status_code=204,
+    summary="Hapus hasil OCR berdasarkan ID",
+    description="Hapus hasil OCR dari database berdasarkan UUID.",
+    response_description="Berhasil dihapus (tanpa body)",
+    responses={
+        404: {"description": "OCR result tidak ditemukan"},
+    },
+)
 async def delete_ocr(
     ocr_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Delete OCR result by ID.
+    Hapus hasil OCR dari database berdasarkan UUID.
     """
     result = await db.execute(
         select(OcrResult).where(OcrResult.id == ocr_id)
