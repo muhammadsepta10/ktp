@@ -20,7 +20,6 @@ class OcrService:
             self._ocr = PaddleOCR(
                 use_angle_cls=True,
                 lang=self.lang,
-                use_gpu=settings.OCR_USE_GPU,
             )
         return self._ocr
 
