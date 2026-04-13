@@ -97,29 +97,26 @@ class OcrService:
             if not result:
                 return ""
 
-            # Extract text from result - handle different result structures
+            # PaddleOCR v5 returns list of OCRResult objects
             extracted_lines = []
 
-            # Handle list of pages (result is list of pages, each page is list of lines)
-            pages = result if isinstance(result, list) else [result]
-
-            for page in pages:
-                if not page:
-                    continue
-                for line in page:
-                    if not line:
-                        continue
-                    # Handle different line formats
-                    # Format 1: [[box], (text, confidence)]
-                    # Format 2: {'text': ..., 'confidence': ...}
-                    if isinstance(line, (list, tuple)) and len(line) >= 2:
-                        text_info = line[1]
-                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
-                            extracted_lines.append(str(text_info[0]))
-                        elif isinstance(text_info, str):
-                            extracted_lines.append(text_info)
-                    elif isinstance(line, dict) and 'text' in line:
-                        extracted_lines.append(line['text'])
+            for page in result:
+                # PaddleOCR v5 format: OCRResult with rec_texts key
+                if hasattr(page, '__getitem__') and 'rec_texts' in page:
+                    extracted_lines.extend(page['rec_texts'])
+                # Legacy format: list of [[box], (text, confidence)]
+                elif isinstance(page, list):
+                    for line in page:
+                        if not line:
+                            continue
+                        if isinstance(line, (list, tuple)) and len(line) >= 2:
+                            text_info = line[1]
+                            if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
+                                extracted_lines.append(str(text_info[0]))
+                            elif isinstance(text_info, str):
+                                extracted_lines.append(text_info)
+                        elif isinstance(line, dict) and 'text' in line:
+                            extracted_lines.append(line['text'])
 
             return "\n".join(extracted_lines)
 
@@ -145,26 +142,24 @@ class OcrService:
             if not result:
                 return ""
 
-            # Extract text from result - handle different result structures
+            # PaddleOCR v5 returns list of OCRResult objects
             extracted_lines = []
 
-            # Handle list of pages
-            pages = result if isinstance(result, list) else [result]
-
-            for page in pages:
-                if not page:
-                    continue
-                for line in page:
-                    if not line:
-                        continue
-                    if isinstance(line, (list, tuple)) and len(line) >= 2:
-                        text_info = line[1]
-                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
-                            extracted_lines.append(str(text_info[0]))
-                        elif isinstance(text_info, str):
-                            extracted_lines.append(text_info)
-                    elif isinstance(line, dict) and 'text' in line:
-                        extracted_lines.append(line['text'])
+            for page in result:
+                if hasattr(page, '__getitem__') and 'rec_texts' in page:
+                    extracted_lines.extend(page['rec_texts'])
+                elif isinstance(page, list):
+                    for line in page:
+                        if not line:
+                            continue
+                        if isinstance(line, (list, tuple)) and len(line) >= 2:
+                            text_info = line[1]
+                            if isinstance(text_info, (list, tuple)) and len(text_info) >= 1:
+                                extracted_lines.append(str(text_info[0]))
+                            elif isinstance(text_info, str):
+                                extracted_lines.append(text_info)
+                        elif isinstance(line, dict) and 'text' in line:
+                            extracted_lines.append(line['text'])
 
             return "\n".join(extracted_lines)
 
