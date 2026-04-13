@@ -15,10 +15,27 @@ async def lifespan(app: FastAPI):
     pass
 
 
+
+tags_metadata = [
+    {"name": "Health", "description": "Health check endpoint"},
+    {"name": "OCR", "description": "General OCR text extraction"},
+    {"name": "KTP OCR", "description": "KTP Indonesia OCR extraction & parsing"},
+]
+
 app = FastAPI(
     title="OCR API Service",
-    description="REST API for text extraction from images using PaddleOCR",
+    description="REST API untuk ekstraksi teks dari gambar umum dan KTP Indonesia menggunakan PaddleOCR.",
     version="1.0.0",
+    openapi_tags=tags_metadata,
+    contact={
+        "name": "Tim Pengembang",
+        "email": "dev@example.com",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    openapi_version="3.1.0",
     lifespan=lifespan,
 )
 
