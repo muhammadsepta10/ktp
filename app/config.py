@@ -8,6 +8,8 @@ class Settings(BaseSettings):
 
     # OCR Configuration
     OCR_LANGUAGE: str = "en"
+    OCR_USE_GPU: bool = False
+    OCR_MAX_IMAGE_SIZE: int = 1920
 
     # Upload Configuration
     UPLOAD_DIR: str = "./uploads"
