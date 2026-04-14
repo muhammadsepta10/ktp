@@ -1,4 +1,5 @@
 import os
+import logging
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,9 +8,12 @@ from datetime import datetime
 from app.database import get_db
 from app.services.ocr_service import get_ocr_service, OcrService
 from app.services.ktp_parser import parse_ktp_text
+from app.services.ai_ktp_parser import parse_ktp_with_ai
 from app.models.ktp_ocr import KtpOcr
 from app.schemas.ktp import KtpOcrDataResponse, KtpOcrErrorResponse
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"])
 
@@ -22,7 +26,7 @@ router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"])
         500: {"description": "Gagal menyimpan data KTP"},
     },
     summary="Upload gambar KTP dan ekstrak data",
-    description="Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan regex, dan simpan hasil ke database.",
+    description="Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan AI (Qwen3:14b), dan simpan hasil ke database.",
     response_description="Data KTP hasil ekstraksi dan parsing",
 )
 async def ocr_ktp(
@@ -31,7 +35,7 @@ async def ocr_ktp(
     ocr_service: OcrService = Depends(get_ocr_service),
 ):
     """
-    Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan regex, dan simpan hasil ke database.
+    Upload gambar KTP Indonesia, ekstrak teks dengan PaddleOCR, parsing field KTP dengan AI (Qwen3:14b), dan simpan hasil ke database.
     """
     allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "image/bmp"]
     if image.content_type not in allowed_types:
@@ -49,7 +53,13 @@ async def ocr_ktp(
     except Exception:
         raise HTTPException(status_code=400, detail="image tidak terbaca")
 
-    parsed = parse_ktp_text(raw_text)
+    # Parsing dengan AI, fallback ke regex jika gagal
+    try:
+        parsed = await parse_ktp_with_ai(raw_text)
+    except ValueError:
+        logger.warning("AI parsing gagal, fallback ke regex parser")
+        parsed = parse_ktp_text(raw_text)
+
     now = datetime.utcnow()
 
     stmt = insert(KtpOcr).values(
