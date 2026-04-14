@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     OCR_USE_GPU: bool = False
     OCR_MAX_IMAGE_SIZE: int = 1920
 
+    # AI Model Configuration
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "qwen3:14b"
+    OLLAMA_TIMEOUT: int = 120  # timeout dalam detik
+    AI_MAX_RETRIES: int = 2  # jumlah retry jika validasi gagal
+
     # Upload Configuration
     UPLOAD_DIR: str = "./uploads"
 
