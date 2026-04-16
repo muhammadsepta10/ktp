@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.config import settings
 from app.database import create_tables
 from app.routers import ocr_router, ktp_router
 
@@ -15,13 +16,13 @@ async def lifespan(app: FastAPI):
     pass
 
 
-
 tags_metadata = [
     {"name": "Health", "description": "Health check endpoint"},
     {"name": "OCR", "description": "General OCR text extraction"},
     {"name": "KTP OCR", "description": "KTP Indonesia OCR extraction & parsing"},
 ]
 
+# Conditionally expose OpenAPI docs only in debug mode
 app = FastAPI(
     title="OCR API Service",
     description="REST API untuk ekstraksi teks dari gambar umum dan KTP Indonesia menggunakan PaddleOCR.",
@@ -37,15 +38,18 @@ app = FastAPI(
     },
     openapi_version="3.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
+    openapi_url="/openapi.json" if settings.DEBUG else None,
 )
 
-# CORS middleware for development
+# CORS middleware — use explicit origins from config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Include routers
