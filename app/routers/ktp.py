@@ -1,4 +1,5 @@
 import os
+import uuid
 import logging
 import aiofiles
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
@@ -12,10 +13,21 @@ from app.services.ai_ktp_parser import parse_ktp_with_ai
 from app.models.ktp_ocr import KtpOcr
 from app.schemas.ktp import KtpOcrDataResponse, KtpOcrErrorResponse
 from app.config import settings
+from app.auth import verify_api_key
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"])
+router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"], dependencies=[Depends(verify_api_key)])
+
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
+
+
+def _safe_extension(filename: str) -> str:
+    """Extract and validate extension from filename."""
+    ext = os.path.splitext(os.path.basename(filename or ""))[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".png"
+    return ext
 
 
 @router.post(
@@ -23,6 +35,7 @@ router = APIRouter(prefix="/api/v1/ocr/ktp", tags=["KTP OCR"])
     response_model=KtpOcrDataResponse,
     responses={
         400: {"model": KtpOcrErrorResponse, "description": "File tidak valid atau image tidak terbaca"},
+        413: {"description": "File terlalu besar"},
         500: {"description": "Gagal menyimpan data KTP"},
     },
     summary="Upload gambar KTP dan ekstrak data",
@@ -42,9 +55,21 @@ async def ocr_ktp(
         raise HTTPException(status_code=400, detail="File harus berupa gambar (jpeg/png/jpg/webp/bmp)")
 
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    filename = f"ktp_{datetime.utcnow().strftime('%Y%m%d%H%M%S%f')}_{image.filename}"
+
+    # Sanitize filename: use UUID + safe extension to prevent path traversal
+    ext = _safe_extension(image.filename or "")
+    filename = f"ktp_{uuid.uuid4().hex}{ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, filename)
+
     content = await image.read()
+
+    # Enforce file size limit
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
+        )
+
     async with aiofiles.open(filepath, "wb") as f:
         await f.write(content)
 

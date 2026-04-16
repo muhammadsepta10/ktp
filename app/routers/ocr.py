@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 import aiofiles
@@ -13,21 +14,39 @@ from app.models.ocr_result import OcrResult
 from app.schemas.ocr import OcrResultResponse, OcrResultList
 from app.services.ocr_service import get_ocr_service, OcrService
 from app.config import settings
+from app.auth import verify_api_key
 
-router = APIRouter(prefix="/api/v1/ocr", tags=["OCR"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/v1/ocr", tags=["OCR"], dependencies=[Depends(verify_api_key)])
+
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+
+def _validate_extension(filename: str) -> str:
+    """Validate and return a safe file extension."""
+    ext = os.path.splitext(filename)[1].lower() if filename else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        ext = ".png"
+    return ext
 
 
 async def save_upload_file(upload_file: UploadFile) -> tuple[str, bytes]:
     """Save uploaded file and return path and content."""
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
-    # Generate unique filename
-    ext = os.path.splitext(upload_file.filename)[1] if upload_file.filename else ".png"
+    # Generate unique filename with safe extension
+    ext = _validate_extension(upload_file.filename or "")
     filename = f"{uuid.uuid4()}{ext}"
     filepath = os.path.join(settings.UPLOAD_DIR, filename)
 
-    # Read content
+    # Read content with size limit
     content = await upload_file.read()
+    if len(content) > settings.MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {settings.MAX_UPLOAD_SIZE // (1024 * 1024)} MB",
+        )
 
     # Save file
     async with aiofiles.open(filepath, "wb") as f:
@@ -45,6 +64,7 @@ async def save_upload_file(upload_file: UploadFile) -> tuple[str, bytes]:
     response_description="Hasil OCR yang berhasil diproses",
     responses={
         400: {"description": "File type tidak valid"},
+        413: {"description": "File terlalu besar"},
         500: {"description": "Gagal memproses gambar"},
     },
 )
@@ -76,20 +96,18 @@ async def create_ocr(
         db.add(ocr_result)
         await db.flush()
 
-
         # Run OCR
         try:
             extracted_text = ocr_service.extract_text_from_bytes(content)
             ocr_result.extracted_text = extracted_text
             ocr_result.status = "completed"
-        except ValueError as e:
+        except ValueError:
             ocr_result.status = "failed"
-            ocr_result.extracted_text = str(e)
             await db.commit()
             await db.refresh(ocr_result)
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to process image: {str(e)}"
+                detail="Failed to process image",
             )
 
         await db.commit()
@@ -99,8 +117,9 @@ async def create_ocr(
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process image: {str(e)}")
+    except Exception:
+        logger.exception("Unexpected error processing OCR upload")
+        raise HTTPException(status_code=500, detail="Failed to process image")
 
 
 @router.get(
@@ -205,10 +224,13 @@ async def delete_ocr(
     if not ocr_result:
         raise HTTPException(status_code=404, detail="OCR result not found")
 
-    # Delete file if exists
-    filepath = os.path.join(settings.UPLOAD_DIR, ocr_result.filename)
-    if os.path.exists(filepath):
-        os.remove(filepath)
+    # Delete file if exists — ensure path stays within UPLOAD_DIR
+    safe_filename = os.path.basename(ocr_result.filename)
+    filepath = os.path.join(settings.UPLOAD_DIR, safe_filename)
+    resolved = os.path.realpath(filepath)
+    upload_dir_resolved = os.path.realpath(settings.UPLOAD_DIR)
+    if resolved.startswith(upload_dir_resolved) and os.path.exists(resolved):
+        os.remove(resolved)
 
     await db.delete(ocr_result)
     await db.commit()
