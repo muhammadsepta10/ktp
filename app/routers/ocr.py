@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import uuid
 import aiofiles
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -22,17 +21,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/ocr", tags=["OCR"], dependencies=[Depends(verify_api_key)])
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
-
-
-def _sanitize_filename(filename: str) -> str:
-    """Sanitize filename to prevent path traversal and special characters."""
-    if not filename:
-        return "upload.png"
-    # Extract just the basename, stripping any directory components
-    name = os.path.basename(filename)
-    # Remove any non-alphanumeric characters except dots, hyphens, underscores
-    name = re.sub(r"[^\w.\-]", "_", name)
-    return name or "upload.png"
 
 
 def _validate_extension(filename: str) -> str:
